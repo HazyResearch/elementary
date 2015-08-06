@@ -37,10 +37,14 @@ sudo update-rc.d elasticsearch defaults 95 10
 sudo service elasticsearch start
 
 # python requirements
-sudo pip install virtualenv
+type virtualenv || sudo pip install virtualenv
 virtualenv --no-site-packages /opt/elementary/env/
 source /opt/elementary/env/bin/activate
+export LD_LIBRARY_PATH=/opt/pgxl/lib:$LD_LIBRARY_PATH
 pip install -r /opt/elementary/requirements.txt
+
+exit ##XXX 
+
 /opt/elementary/django/manage.py syncdb
 /opt/elementary/django/manage.py migrate
 /opt/elementary/django/manage.py collectstatic 
