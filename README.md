@@ -254,3 +254,9 @@ This section describes the steps necessary to deploy the API to an ec-2 instance
     ```
     /opt/elementary$ /opt/elementary/env/bin/celery purge --workdir /opt/elementary/django -A elementary
     ```
+    
+*   Logging into postgres database
+    ```
+    psql -h 127.0.0.1 -U eve elem
+    ```
+    
