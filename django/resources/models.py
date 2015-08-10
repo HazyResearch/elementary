@@ -10,6 +10,7 @@ class Repository(models.Model):
     PIPELINE_CHOICES = (
         ('memex/atf', 'Memex ATF'),
         ('memex/escort', 'Memex Escort'),
+	('memex/escort-review','Memex Escort Review'),
         ('genomics', 'Genomics')
     )
     name = models.TextField()
