@@ -158,8 +158,14 @@ This section describes the steps necessary to deploy the API to an ec-2 instance
    git config --global user.email "$EMAIL"
    git config --global user.name "$NAME"
 
-   # git clone commands here
+   ```
+   
+   Now clone following repositories into `/opt`:
+   - elementary-memex
+   - parser
+   - pgxl
 
+   ```
    cd /opt/services/parser
    ./setup.sh
    cd /opt/services/pgxl
