@@ -83,6 +83,8 @@ def run_pipeline(task_id, repo, docs):
 
     # results are now in task_dir/result.json
     # the _ids here are mongo's internal IDs (unique and allow efficient updates)
+    
+    
     results = {}
     with open(task_dir + '/result.json', 'r') as f:
         for line in f:
@@ -95,5 +97,46 @@ def run_pipeline(task_id, repo, docs):
         _id = str(d['_id'])
         if _id in results:
             d['result'] = results[_id]
+    '''
+    result_ismassageparlorad = {}
+    with open(task_dir + '/ismassageparlorad.json', 'r') as f:
+        for line in f:
+            j = json.loads(line)
+            _id = j['doc_id']
+            del j['doc_id']
+            result_ismassageparlorad[str(_id)] = j
 
+    result_issexad = {}
+    with open(task_dir + '/issexad.json', 'r') as f:
+        for line in f:
+            j = json.loads(line)
+            _id = j['doc_id']
+            del j['doc_id']
+            result_issexad[str(_id)] = j
+
+    result_rates = {}
+    with open(task_dir + '/rates.json', 'r') as f:
+        for line in f:
+            j = json.loads(line)
+            _id = j['doc_id']
+            del j['doc_id']
+            result_rates[str(_id)] = j
+
+    for d in docs:
+        _id = str(d['_id'])
+        tmp = {}
+        if _id in result_ismassageparlorad:
+            tmp['is_massage_parlor_ad'] = result_ismassageparlorad[_id]
+        else:
+            tmp['is_massage_parlor_ad'] = ""
+        if _id in result_issexad:
+            tmp['is_sex_ad'] = result_issexad[_id]
+        else:
+            tmp['is_sex_ad'] = ""
+        if _id in result_rates:
+            tmp['rates'] = result_rates[_id]
+        else:
+            tmp['rates'] = ""
+        d['result'] = tmp
+    '''
     shutil.rmtree(task_dir)
