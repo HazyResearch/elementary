@@ -14,6 +14,11 @@ sudo apt-get update
 sudo apt-get install -y python-pip python-dev build-essential
 sudo apt-get install -y nginx supervisor zip curl ntp apache2-utils
 
+# java
+sudo add-apt-repository -y ppa:openjdk-r/ppa
+sudo apt-get update
+sudo apt-get install -y sudo apt-get install openjdk-8-jdk
+
 # postgres
 sudo apt-get install -y postgresql postgresql-contrib libpq-dev
 sudo -u postgres /usr/bin/psql postgres -c 'create user eve superuser'
