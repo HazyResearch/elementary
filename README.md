@@ -198,8 +198,7 @@ This section describes the steps necessary to deploy the API to an ec-2 instance
    Install DeepDive with its dependencies.
    ```
    cd /opt
-   export BRANCH=develop
-   bash <(curl -fsSL https://raw.github.com/HazyResearch/deepdive/$BRANCH/util/install.sh)
+   bash <(curl -fsSL deepdive.stanford.edu/install)
    2
    4
    3
