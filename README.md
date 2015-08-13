@@ -161,6 +161,7 @@ This section describes the steps necessary to deploy the API to an ec-2 instance
    ```
    
    Now clone following repositories into `/opt`:
+   - elementary
    - elementary-memex
    - parser
    - pgxl
@@ -178,9 +179,9 @@ This section describes the steps necessary to deploy the API to an ec-2 instance
    (not 5432) for pgxl to avoid clashing with Postgres.
 
    ```
-   cd /opt/elementary-memex
-   ./setup.sh
    cd /opt/elementary
+   ./setup.sh
+   cd /opt/elementary-memex
    ./setup.sh
    ```
    Nginx will fail without a valid SSL certificate. You can create a self-signed
