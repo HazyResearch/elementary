@@ -178,7 +178,7 @@ This section describes the steps necessary to deploy the API to an ec-2 instance
    (not 5432) for pgxl to avoid clashing with Postgres.
 
    ```
-   cd /opt/elementy-memex
+   cd /opt/elementary-memex
    ./setup.sh
    cd /opt/elementary
    ./setup.sh
