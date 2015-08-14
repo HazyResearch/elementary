@@ -50,6 +50,7 @@ Documentation for customers is in `resources/templates/index.html`. Here are com
         -u $USERNAME:$PASSWORD \
         https://api.deepdivedata.org/repos/$USERNAME/$REPOSITORY/
     ```
+    If use debugging server, need to add '--insecure' in this command
 
 *   Submitting a single document to a repository
 
