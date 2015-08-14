@@ -289,3 +289,17 @@ This section describes the steps necessary to deploy the API to an ec-2 instance
     ```
     DELETE from resources_repository WHERE id=4;
     ```
+
+### Analyzing Query Logs
+
+The most important file is ```/opt/elementary/logs/access.log```.
+
+To get the number of document uploads by user, you can run
+```
+cat access.log | sed -n 's/.*POST \/docs\/\([a-z]*\)\/.*/\1/p' > docs_posts
+sort docs_posts | uniq --count
+```
+
+Similary, you can get ```POST /sources/``` and ```GET /search/``` requests.
+
+
