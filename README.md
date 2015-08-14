@@ -265,4 +265,27 @@ This section describes the steps necessary to deploy the API to an ec-2 instance
     ```
     psql -h 127.0.0.1 -U eve elem
     ```
+
+* Currently if a hyphen `-` is specified in creating a repo, the server will crash. In this case, look into the postgres database to fix it:
+* 
+    ```
+    /usr/bin/psql -p5432 elem
+    select * from resources_repository;
+    ```
+
+    Find the repo name that causes the problem. e.g.:
+
+    ```
+    id |     name      |            created            | owner_id |      pipeline
+    ----+---------------+-------------------------------+----------+---------------------
+      1 | atf           | 2015-08-13 22:45:26.799028+00 |        2 | memex/atf
+      2 | escort        | 2015-08-13 22:57:03.825788+00 |        2 | memex/escort
+      3 | review        | 2015-08-14 01:15:38.64802+00  |        2 | memex/escort-review
+      4 | escort-review | 2015-08-14 01:41:24.176763+00 |        2 | memex/escort-review
+    ```
     
+    Delete the row from this table:
+    
+    ```
+    DELETE from resources_repository WHERE id=4;
+    ```
