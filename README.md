@@ -300,6 +300,9 @@ cat access.log | sed -n 's/.*POST \/docs\/\([a-z]*\)\/.*/\1/p' > docs_posts
 sort docs_posts | uniq --count
 ```
 
-Similary, you can get ```POST /sources/``` and ```GET /search/``` requests.
+Similary, you can get ```POST /sources/``` requests.
 
-
+To get search requests, run
+```
+cat access.log | sed -n 's/.*\/docs\/\([a-z]*\)\/.*\/search.*/\1/p' | sort | uniq --count
+```
