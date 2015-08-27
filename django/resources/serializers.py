@@ -57,26 +57,27 @@ class UserSerializer(serializers.ModelSerializer):
 
 
 class RepositorySerializer(serializers.ModelSerializer):
-    owner = serializers.ReadOnlyField(source='owner.username')
+    #owner = serializers.ReadOnlyField(source='owner.username')
     name = serializers.RegexField(r'\w+')
     pipeline = serializers.ChoiceField(Repository.PIPELINE_CHOICES, allow_blank=True)
     url = serializers.HyperlinkedIdentityField(
         view_name='repository-detail',
-        lookup_field='full_name'
+        lookup_field='name' #'full_name'
     )
     docs = serializers.SerializerMethodField()
     sources = serializers.SerializerMethodField()
 
     class Meta:
         model = Repository
-        fields = ('url', 'docs', 'sources', 'owner', 'name', 'pipeline', 'created')
+        fields = ('url', 'docs', 'sources', #'owner', 
+             'name', 'pipeline', 'created')
 
     def get_docs(self, obj):
-        url = '/docs/%s/' % obj.full_name
+        url = '/docs/%s/' % obj.name #full_name
         return self.context['request'].build_absolute_uri(url)
 
     def get_sources(self, obj):
-        url = '/sources/%s/' % obj.full_name
+        url = '/sources/%s/' % obj.name #full_name
         return self.context['request'].build_absolute_uri(url)
 
     @catch_dml_failure('Repo name already exists')
@@ -89,25 +90,29 @@ class RepositorySerializer(serializers.ModelSerializer):
 
 
 class DocumentSerializer(serializers.ModelSerializer):
-    repo = serializers.StringRelatedField(source='repo.full_name')
+    #repo = serializers.StringRelatedField(source='repo.full_name')
+    repo = serializers.StringRelatedField(source='repo.name')
     docid = serializers.CharField(max_length=100, trim_whitespace=True)
     doc_url = serializers.URLField(max_length=1000, allow_blank=True, source='url')
     content = serializers.CharField(trim_whitespace=True)
     created = serializers.ReadOnlyField()
     processed = serializers.ReadOnlyField()
     url = serializers.SerializerMethodField()
+    processing = serializers.SerializerMethodField()
     result = serializers.SerializerMethodField()
 
     class Meta:
         model = Document
-        fields = ('url', 'repo', 'docid', 'doc_url', 'created', 'processed', 'content', 'result')
+        fields = ('url', 'repo', 'docid', 'doc_url', 'created', 'processed', 'content', 'processing', 'result')
 
     def get_url(self, obj):
         url = '/docs/%s/' % obj.full_name
         return self.context['request'].build_absolute_uri(url)
 
-    def get_result(self, obj):
-        if not obj.processed:
+    def get_processing(self, obj):
+	if obj.is_preprocessed:
+	    return {'_status': 'PREPROCESSED'}
+	if not obj.processed:
             return {'_status': 'NOT_PROCESSED_YET'}
         if obj.processed and not obj.result:
             if obj.processing_error:
@@ -116,7 +121,22 @@ class DocumentSerializer(serializers.ModelSerializer):
                     '_error': obj.processing_error
                 }
             return {'_status': 'NO_EXTRACTIONS'}
-        return obj.result
+	return {'_status': 'PROCESSED'} 
+
+    def get_result(self, obj):
+	return obj.result
+	#if obj.is_preprocessed:
+	    
+        #if not obj.processed:
+        #    return {'_status': 'NOT_PROCESSED_YET'}
+        #if obj.processed and not obj.result:
+        #    if obj.processing_error:
+        #        return {
+        #            '_status': 'ERROR',
+        #            '_error': obj.processing_error
+        #        }
+        #    return {'_status': 'NO_EXTRACTIONS'}
+        #return obj.result
 
     @catch_dml_failure('Value of docid conflicts with existing records')
     def create(self, validated_data):
@@ -152,9 +172,10 @@ class DocSourceSerializer(serializers.ModelSerializer):
 
     url = serializers.SerializerMethodField()
     crawlid = serializers.CharField(trim_whitespace=True, default=random_uuid_hex)
-    repo = serializers.StringRelatedField(source='repo.full_name')
+    #repo = serializers.StringRelatedField(source='repo.full_name')
+    repo = serializers.StringRelatedField(source='repo.name')
     source_url = serializers.URLField(max_length=1000, allow_blank=True, source='url')
-    creator = serializers.StringRelatedField(source='creator.username')
+    #creator = serializers.StringRelatedField(source='creator.username')
     created = serializers.ReadOnlyField()
     processed = serializers.ReadOnlyField()
     total_docs = serializers.ReadOnlyField()
@@ -165,11 +186,13 @@ class DocSourceSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = DocSource
-        fields = ('url', 'crawlid', 'repo', 'source_url', 'creator', 'created',
+        fields = ('url', 'crawlid', 'repo', 'source_url', #'creator', 
+            'created',
             'processed', 'total_docs', 'ingested_docs', 'invalid_docs', 'processed_docs', 'ingestion_log')
 
     def get_url(self, obj):
-        url = '/sources/%s/%s/' % (obj.repo.full_name, obj.pk)
+        #url = '/sources/%s/%s/' % (obj.repo.full_name, obj.pk)
+        url = '/sources/%s/%s/' % (obj.repo.name, obj.pk)
         return self.context['request'].build_absolute_uri(url)
 
     @catch_dml_failure('Value of crawlid conflicts with existing records')

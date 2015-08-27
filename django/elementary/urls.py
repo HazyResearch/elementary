@@ -6,8 +6,10 @@ from resources import views
 router = routers.DefaultRouter()
 router.register(r'users', views.UserViewSet)
 router.register(r'repos', views.RepoViewSet)
-router.register(r'docs/(?P<user>\w+)/(?P<repo>\w+)', views.DocViewSet)
-router.register(r'sources/(?P<user>\w+)/(?P<repo>\w+)', views.DocSourceViewSet)
+#router.register(r'docs/(?P<user>\w+)/(?P<repo>\w+)', views.DocViewSet)
+#router.register(r'sources/(?P<user>\w+)/(?P<repo>\w+)', views.DocSourceViewSet)
+router.register(r'docs/(?P<repo>\w+)', views.DocViewSet)
+router.register(r'sources/(?P<repo>\w+)', views.DocSourceViewSet)
 
 urlpatterns = [
     url(r'^$', views.root),

@@ -28,7 +28,7 @@ es = Elasticsearch()
 def process_docs():
     pending_repos = []
     for r in Repository.objects.all():
-        if r.docs.filter(processed__isnull=True).exists():
+        if r.docs.filter(is_preprocessed__exact=False, processed__isnull=True).exists():
             pending_repos.append(r)
     if not pending_repos:
         logger.info('== No pending docs to be processed.')
@@ -50,32 +50,14 @@ def ingest_sources():
         logger.info('==== Ingesting pending doc source %s' % s)
         ingest_source(s)
 
-
-def process_docs_in_batch(repo, doc_ids):
-    logger.info('processing %d docs' % len(doc_ids))
-    task_id = process_docs.request.id
-
-    collection = Document.get_mongo_collection()
-    docs = list(collection.find({'_id': {'$in': tuple(doc_ids)}}))
-
-    # ddctrl updates docs in place
-
-    error = None
-    try:
-        ddctrl.run_pipeline(task_id, repo, docs)
-    except Exception as e:
-        logger.exception('Error processing %d docs' % len(docs))
-        error = str(e)
-
-    # add to elasticsearch
+def add_or_replace_elasticsearch(repo, docs):
     bulk_data = []
     INDEX_NAME = 'elem'
+    N=10000
+    TIMEOUT=300
     for d in docs:
         id = d['_id']
         content = d['content']
-        
-        if error is not None:
-            d['processing_error'] = error
 
         result = d.get('result', {})
         op_dict = {
@@ -88,12 +70,50 @@ def process_docs_in_batch(repo, doc_ids):
         data_dict = {
             "id": id,
             "content": content,
-            "repo": repo.full_name,
+            "repo": repo.name, #repo.full_name,
             "result": result
         }
         bulk_data.append(op_dict)
         bulk_data.append(data_dict)
+        if len(bulk_data) > 1000:
+           res = es.bulk(index = INDEX_NAME, body = bulk_data, refresh = True, timeout=TIMEOUT)
+           bulk_data = []
+
+    if len(bulk_data) > 0:
+       res = es.bulk(index = INDEX_NAME, body = bulk_data, refresh = True, timeout=TIMEOUT)
+
+def delete_from_elasticsearch(repo, doc_ids):
+    bulk_data = []
+    INDEX_NAME = 'elem'
+    for id in doc_ids:
+        op_dict = {
+            "delete": {
+                "_index": INDEX_NAME,
+                "_type": 'docs',
+                "_id": id
+            }
+        }
+        bulk_data.append(op_dict)
     res = es.bulk(index = INDEX_NAME, body = bulk_data, refresh = True)
+
+
+def process_docs_in_batch(repo, doc_ids):
+    logger.info('processing %d docs' % len(doc_ids))
+    task_id = process_docs.request.id
+
+    collection = Document.get_mongo_collection()
+    docs = list(collection.find({'_id': {'$in': tuple(doc_ids)}}))
+
+    # ddctrl updates docs in place
+    error = None
+    try:
+        ddctrl.run_pipeline(task_id, repo, docs)
+    except Exception as e:
+        logger.exception('Error processing %d docs' % len(docs))
+        error = str(e)
+
+    # add to elasticsearch
+    add_or_replace_elasticsearch(repo, docs)
 
     # update mongo
     ops = []
@@ -115,7 +135,7 @@ def process_docs_in_batch(repo, doc_ids):
             key = d.source.crawlid
             source_map[key] = source_map.get(key, 0) + 1
     for s, c in source_map.items():
-        ds = DocSource.objects.get(crawlid=s)
+        ds = DocSource.objects.get(repo=repo,crawlid=s)
         ds.processed_docs = F('processed_docs') + c
         ds.save()
 
@@ -128,11 +148,11 @@ def process_docs_in_batch(repo, doc_ids):
 def process_docs_for_repo(repo):
     logger.info('pipeline: %s' % repo.pipeline)
     logger.info('num docs: %d' % repo.docs.count())
-    doc_ids = repo.docs.filter(processed__isnull=True).order_by('created')\
+    doc_ids = repo.docs.filter(is_preprocessed__exact=False,processed__isnull=True).order_by('created')\
                        .values_list('id', flat=True)[:PROCESSING_BATCH_SIZE]
     while doc_ids:
         process_docs_in_batch(repo, doc_ids)
-        doc_ids = repo.docs.filter(processed__isnull=True).order_by('created')\
+        doc_ids = repo.docs.filter(is_preprocessed__exact=False,processed__isnull=True).order_by('created')\
                            .values_list('id', flat=True)[:PROCESSING_BATCH_SIZE]
     logger.info('DONE!')
 
@@ -209,20 +229,22 @@ def ingest_docs_batch(source, docs, max_retries=2):
     new_docids = docids - existing_docids
     records = []
     for docid in new_docids:
+        is_preprocessed = True #docmap[docid].get('is_preprocessed') 
         records.append(Document(docid=docid,
                                 repo=source.repo,
                                 source=source,
-                                url=docmap[docid].get('url')))
+                                url=docmap[docid].get('url'),
+				is_preprocessed=is_preprocessed))
     if records:
-        try:
-            Document.objects.bulk_create(records)
-        except IntegrityError:
-            # other processes may have just taken some keys in new_docids;
-            # we retry a couple of times before giving up.
-            if max_retries > 0:
-                return ingest_docs_batch(source, docs, max_retries - 1)
-            else:
-                raise Exception('DB was too busy; record creation kept failing.')
+        #try:
+        Document.objects.bulk_create(records)
+        #except IntegrityError:
+        #    # other processes may have just taken some keys in new_docids;
+        #    # we retry a couple of times before giving up.
+        #    #if max_retries > 0:
+        #    #    return ingest_docs_batch(source, docs, max_retries - 1)
+        #    #else:
+        #    #    raise Exception('DB was too busy; record creation kept failing.')
         docid_to_id_map = dict(Document.objects.filter(repo=source.repo, docid__in=new_docids)
                                .values_list('docid', 'id'))
         mongo_records = []
@@ -235,8 +257,12 @@ def ingest_docs_batch(source, docs, max_retries=2):
             mongo_records.append(doc)
         logger.info('inserting %d docs into mongo' % len(mongo_records))
         collection = Document.get_mongo_collection()
+        collection.delete_many({ '_id' : { '$in' : [ doc['_id'] for doc in mongo_records]}})
         collection.insert_many(mongo_records, ordered=False)
         collection.database.client.close()
+
+        add_or_replace_elasticsearch(source.repo, mongo_records)
+
 
     return len(records)
 

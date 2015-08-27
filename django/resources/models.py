@@ -12,20 +12,20 @@ class Repository(models.Model):
         ('memex/escort', 'Memex Escort'),
         ('genomics', 'Genomics')
     )
-    name = models.TextField()
-    owner = models.ForeignKey('auth.User', related_name='repos')
+    name = models.TextField(primary_key=True)
+    #owner = models.ForeignKey('auth.User', related_name='repos')
     created = models.DateTimeField(auto_now_add=True)
     pipeline = models.TextField(choices=PIPELINE_CHOICES, null=True)
 
-    class Meta:
-        unique_together = ('owner', 'name')
+    #class Meta:
+    #    unique_together = ('owner', 'name')
 
-    @property
-    def full_name(self):
-        return '%s/%s' % (self.owner.username, self.name)
+    #@property
+    #def full_name(self):
+    #    return '%s/%s' % (self.owner.username, self.name)
 
     def __unicode__(self):
-        return self.full_name
+        return self.name #full_name
 
 
 class Document(MongoMixin, ElasticMixin, models.Model):
@@ -38,6 +38,8 @@ class Document(MongoMixin, ElasticMixin, models.Model):
     properties = HStoreField(null=True)
     created = models.DateTimeField(auto_now_add=True)
     # will be updated by the processor
+    is_preprocessed = models.BooleanField(default=False)
+    # used to skip processing
     processed = models.DateTimeField(null=True)
     processing_error = models.TextField(null=True)
 
@@ -62,7 +64,8 @@ class Document(MongoMixin, ElasticMixin, models.Model):
 
     @property
     def full_name(self):
-        return '%s/%s' % (self.repo.full_name, self.docid)
+        #return '%s/%s' % (self.repo.full_name, self.docid)
+        return '%s/%s' % (self.repo.name, self.docid)
 
     @property
     def result(self):
@@ -87,7 +90,7 @@ class DocSource(models.Model):
     # docid and content; and optionally keys like 'url' and others.
     url = models.URLField(max_length=1000)
     crawlid = models.TextField(default=random_uuid_hex) 
-    creator = models.ForeignKey('auth.User')
+    #creator = models.ForeignKey('auth.User')
     created = models.DateTimeField(auto_now_add=True)
     # fields below will be updated by the ingestor
     processed = models.DateTimeField(null=True)
@@ -103,7 +106,8 @@ class DocSource(models.Model):
 
     def __unicode__(self):
         #return '[%s][%s] %s' % (self.id, self.repo.full_name, self.url)
-        return '[%s][%s] %s' % (self.id, self.repo.full_name, self.crawlid)
+        #return '[%s][%s] %s' % (self.id, self.repo.full_name, self.crawlid)
+        return '[%s][%s] %s' % (self.id, self.repo.name, self.crawlid)
 
 
 class Result(models.Model):
@@ -116,33 +120,3 @@ class Result(models.Model):
     # each record is an opaque blob; could be a string or a JSON
     data = models.TextField()
 
-# class Mention(models.Model):
-#     doc = models.ForeignKey('Document', related_name='mentions')
-#     # denormalized field
-#     repo = models.ForeignKey('Repository', related_name='mentions')
-#     # mention ID
-#     mid = models.TextField()
-#     # sentence ID; mainly for internal use (e.g., DD feedback)
-#     sid = models.TextField(null=True)
-#     # raw string content
-#     content = models.TextField()
-#     # We sometimes extract different text sections from the doc content (e.g., title and body)
-#     # and then perform NLP and extraction from the resultant sections. As a result, each
-#     # mention comes from a section (could be 'content' itself), and the three fields below
-#     # locate the mentinon.
-#     # There are also mentions without location info (e.g., DOM extractions), hence null=True.
-#     section = models.TextField(null=True)  # see Document.section_text
-#     offset = models.IntegerField(null=True)
-#     length = models.IntegerField(null=True)
-#     # e.g., "title:phone", "body:phone", "dom:author-name", "abstract:gene", "pheno-alias"
-#     mention_type = models.TextField()
-#     # e.g., "phone", "person", "gene", "pheno"
-#     entity_type = models.TextField()
-#     # e.g., "Bob Dylan", "555-666-7777", "BRAF"
-#     entity_name = models.TextField()
-#
-#     class Meta:
-#         index_together = [
-#             ['entity_type', 'repo'],
-#             ['entity_type', 'entity_name', 'repo']
-#         ]

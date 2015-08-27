@@ -9,6 +9,7 @@ from rest_framework.authtoken.views import ObtainAuthToken
 from rest_framework.permissions import BasePermission
 from rest_framework.response import Response
 from rest_framework.decorators import detail_route, list_route
+from rest_framework.permissions import IsAuthenticated
 
 from .models import Document, DocSource, Repository
 from .serializers import (DocumentSerializer, DocSourceSerializer,
@@ -16,6 +17,10 @@ from .serializers import (DocumentSerializer, DocSourceSerializer,
 import json
 import urllib
 import urllib2
+
+import logging
+
+logger = logging.getLogger(__name__)
 
 @login_required
 def root(request):
@@ -85,26 +90,29 @@ class UserViewSet(viewsets.ModelViewSet):
 
 
 class RepoViewSet(viewsets.ModelViewSet):
-    queryset = Repository.objects.select_related('owner')
+    queryset = Repository.objects.all() #select_related('owner')
     serializer_class = RepositorySerializer
     permission_classes = [RepoPermission]
-    lookup_field = 'full_name'
-    lookup_value_regex = r'\w+/\w+'
+    #permission_classes = (IsAuthenticated,)
+    lookup_field = 'name' #'full_name'
+    lookup_value_regex = r'\w+' # r'\w+/\w+'
 
     def get_queryset(self):
-        user = self.request.user
-        if not user.is_staff:
-            return Repository.objects.filter(owner=user)
+        #user = self.request.user
+        #if not user.is_staff:
+        #    return Repository.objects.filter(owner=user)
         return Repository.objects.all()
 
     def get_object(self):
         queryset = self.get_queryset()
-        owner_name, name = self.kwargs['full_name'].split('/', 1)
-        obj = get_object_or_404(queryset, name=name, owner__username=owner_name)
+        #owner_name, name = self.kwargs['full_name'].split('/', 1)
+        name = self.kwargs['name']
+        #obj = get_object_or_404(queryset, name=name, owner__username=owner_name)
+        obj = get_object_or_404(queryset, name=name)
         return obj
 
     def perform_create(self, serializer):
-        serializer.save(owner=self.request.user)
+        serializer.save() #(owner=self.request.user)
 
 
 class DocViewSet(viewsets.GenericViewSet,
@@ -115,11 +123,15 @@ class DocViewSet(viewsets.GenericViewSet,
                  mixins.CreateModelMixin):
     queryset = Document.objects.all()
     serializer_class = DocumentSerializer
-    permission_classes = [IsAdminOrOwner]
+    #permission_classes = [IsAdminOrOwner]
+    permission_classes = (IsAuthenticated,)
     lookup_field = 'docid'
 
     def get_queryset(self):
-        return _get_queryset_owned(Document, self)
+        repo_name = self.kwargs.get('repo', None)
+        repo = Repository.objects.filter(name=repo_name).first()
+        return Document.objects.all().filter(repo=repo)
+        #return _get_queryset_owned(Document, self)
 
     def get_object(self):
         queryset = self.get_queryset()
@@ -128,16 +140,34 @@ class DocViewSet(viewsets.GenericViewSet,
         return obj
 
     def perform_create(self, serializer):
-        _create_if_owned(self, serializer)
+        repo_name = self.kwargs.get('repo', None)
+        repo = Repository.objects.filter(name=repo_name).first()
+        kwargs = {}
+        serializer.save(repo=repo, **kwargs)
+        #_create_if_owned(self, serializer)
 
-    def delete(self, request, *args, **kwargs):
-        _delete_if_owned(self, serializer)
+    def perform_destroy(self, serializer):
+        #repo_name = self.kwargs.get('repo', None)
+        #repo = Repository.objects.filter(name=repo_name).first()
+        kwargs = {}
+        serializer.delete(**kwargs)
 
-#    def update(self, request, *args, **kwargs):
-#        _update_if_owned(self, serializer)
+
+    #def delete(self, request, *args, **kwargs):
+    #    repo_name = self.kwargs.get('repo', None)
+    #    repo = Repository.objects.filter(name=repo_name).first()
+    #    kwargs = {}
+    #    #serializer = self.get_serializer(page, many=True)
+    #    #serializer.destroy(repo=repo, **kwargs)
+    #    
+    #        _delete_if_owned(self, serializer)
+
+    #    def update(self, request, *args, **kwargs):
+    #        _update_if_owned(self, serializer)
 
     @list_route()
-    def search(self, request, user, repo):
+    def search(self, request, repo):
+        #logger.info('elasticsearch request')
         q = request.GET.get('q', '')
         r_from = int(request.GET.get('from', '0'))
         r_size = int(request.GET.get('size', '10'))
@@ -147,7 +177,7 @@ class DocViewSet(viewsets.GenericViewSet,
             "query_string" : { "query" : q }
           },
           "filter": {
-            "term" : { "repo" : user + "/" + repo }
+            "term" : { "repo" : repo }
           },
           "from" : r_from,
           "size" : r_size
@@ -168,13 +198,21 @@ class DocSourceViewSet(viewsets.GenericViewSet,
 
     queryset = DocSource.objects.all()
     serializer_class = DocSourceSerializer
-    permission_classes = [IsAdminOrOwner]
+    #permission_classes = [IsAdminOrOwner]
+    permission_classes = (IsAuthenticated,)
 
     def get_queryset(self):
-        return _get_queryset_owned(DocSource, self)
+        repo_name = self.kwargs.get('repo', None)
+        repo = Repository.objects.filter(name=repo_name).first()
+        return DocSource.objects.all().filter(repo=repo)
+        #return _get_queryset_owned(DocSource, self)
 
     def perform_create(self, serializer):
-        _create_if_owned(self, serializer, {'creator': self.request.user})
+        repo_name = self.kwargs.get('repo', None)
+        repo = Repository.objects.filter(name=repo_name).first()
+        kwargs = {}
+        serializer.save(repo=repo, **kwargs)
+        #_create_if_owned(self, serializer, {'creator': self.request.user})
 
 def _get_queryset_owned(model, view):
     queryset = model.objects.select_related('repo__owner')
@@ -221,3 +259,4 @@ def _get_repo_from_view(view):
     repo = Repository.objects.filter(name=repo_name,
                                      owner__username=user_name).first()
     return repo
+
