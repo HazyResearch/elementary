@@ -2,6 +2,7 @@ from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
 from django.http import Http404, HttpResponse
+from django.http import StreamingHttpResponse
 from django.shortcuts import render, get_object_or_404
 from rest_framework import generics, mixins, viewsets
 from rest_framework.authtoken.models import Token
@@ -189,6 +190,17 @@ class DocViewSet(viewsets.GenericViewSet,
         response = urllib2.urlopen(req)
         the_page = response.read()
         return HttpResponse(the_page)
+
+    def stream_response_generator(self):
+        collection = Document.get_mongo_collection()
+        for d in collection.find({}):
+           yield str(d)
+
+    @list_route()
+    def all(self, request, user, repo):
+        resp = StreamingHttpResponse( self.stream_response_generator(), content_type='text/plain')
+        resp['Content-Disposition'] = 'attachment; filename="all.json"'
+        return resp
 
 
 class DocSourceViewSet(viewsets.GenericViewSet,
