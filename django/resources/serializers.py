@@ -144,6 +144,7 @@ class DocumentSerializer(serializers.ModelSerializer):
         instance.update_mongo_data({
             'content': validated_data['content'],
             'url': instance.url,
+            'repo': instance.repo,
             'created': instance.created,
         })
         instance.update_elastic_data({

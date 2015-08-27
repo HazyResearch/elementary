@@ -253,6 +253,7 @@ def ingest_docs_batch(source, docs, max_retries=2):
             id = docid_to_id_map[docid]
             doc = docmap[docid]
             doc['_id'] = id
+            doc['repo'] = source.repo
             doc['created'] = ts_created
             mongo_records.append(doc)
         logger.info('inserting %d docs into mongo' % len(mongo_records))
