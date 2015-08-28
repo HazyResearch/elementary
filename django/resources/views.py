@@ -194,10 +194,10 @@ class DocViewSet(viewsets.GenericViewSet,
     def stream_response_generator(self):
         collection = Document.get_mongo_collection()
         for d in collection.find({}):
-           yield str(d)
+           yield str(d) + '\n'
 
     @list_route()
-    def all(self, request, user, repo):
+    def all(self, request, repo):
         resp = StreamingHttpResponse( self.stream_response_generator(), content_type='text/plain')
         resp['Content-Disposition'] = 'attachment; filename="all.json"'
         return resp
