@@ -11,15 +11,19 @@ from rest_framework.permissions import BasePermission
 from rest_framework.response import Response
 from rest_framework.decorators import detail_route, list_route
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.renderers import JSONRenderer, BrowsableAPIRenderer
 
-from .models import Document, DocSource, Repository
+from .models import Document, DocSource, Regexp, Repository
 from .serializers import (DocumentSerializer, DocSourceSerializer,
-    RepositorySerializer, UserSerializer)
+    RegexpSerializer, RepositorySerializer, UserSerializer)
+from bson import json_util
 import json
 import urllib
 import urllib2
 
 import logging
+
+from .bulk import *
 
 logger = logging.getLogger(__name__)
 
@@ -115,6 +119,12 @@ class RepoViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         serializer.save() #(owner=self.request.user)
 
+    def perform_destroy(self, instance):
+        # delete from elastic
+        elastic_delete_repo(instance.name) 
+        # delete from mongo
+        mongo_delete_repo(instance.name)
+        super(RepoViewSet, self).perform_destroy(instance)
 
 class DocViewSet(viewsets.GenericViewSet,
                  mixins.ListModelMixin,
@@ -126,6 +136,7 @@ class DocViewSet(viewsets.GenericViewSet,
     serializer_class = DocumentSerializer
     #permission_classes = [IsAdminOrOwner]
     permission_classes = (IsAuthenticated,)
+    renderer_classes = (JSONRenderer,BrowsableAPIRenderer,)
     lookup_field = 'docid'
 
     def get_queryset(self):
@@ -147,28 +158,16 @@ class DocViewSet(viewsets.GenericViewSet,
         serializer.save(repo=repo, **kwargs)
         #_create_if_owned(self, serializer)
 
-    def perform_destroy(self, serializer):
-        #repo_name = self.kwargs.get('repo', None)
-        #repo = Repository.objects.filter(name=repo_name).first()
-        kwargs = {}
-        serializer.delete(**kwargs)
-
-
-    #def delete(self, request, *args, **kwargs):
-    #    repo_name = self.kwargs.get('repo', None)
-    #    repo = Repository.objects.filter(name=repo_name).first()
-    #    kwargs = {}
-    #    #serializer = self.get_serializer(page, many=True)
-    #    #serializer.destroy(repo=repo, **kwargs)
-    #    
-    #        _delete_if_owned(self, serializer)
-
-    #    def update(self, request, *args, **kwargs):
-    #        _update_if_owned(self, serializer)
+    def perform_destroy(self, instance):
+        # delete from elasticsearch
+        instance.delete_elastic_data()
+        # delete from mongo
+        instance.delete_mongo_data()
+        # delete from postgres
+        super(DocViewSet, self).perform_destroy(instance)
 
     @list_route()
     def search(self, request, repo):
-        #logger.info('elasticsearch request')
         q = request.GET.get('q', '')
         r_from = int(request.GET.get('from', '0'))
         r_size = int(request.GET.get('size', '10'))
@@ -189,18 +188,53 @@ class DocViewSet(viewsets.GenericViewSet,
         req = urllib2.Request(url, json.dumps(data))
         response = urllib2.urlopen(req)
         the_page = response.read()
-        return HttpResponse(the_page)
+        return HttpResponse(the_page, content_type="application/json")
 
-    def stream_response_generator(self):
+    def stream_response_generator(self, repo):
         collection = Document.get_mongo_collection()
-        for d in collection.find({}):
-           yield str(d) + '\n'
+        for d in collection.find({'repo':repo}, { 'docid':1, 'content':1, 'doc_url':1, 'result':1,
+           'markup_partners':1, 'regexp_partners':1, 'created':'1', 'url':1, 'processing':1}):
+           del d['_id']
+           d['created'] = d['created'].strftime("%Y-%m-%d %H:%M:%S")
+           yield json.dumps(d) + '\n'
 
     @list_route()
     def all(self, request, repo):
-        resp = StreamingHttpResponse( self.stream_response_generator(), content_type='text/plain')
+        resp = StreamingHttpResponse( self.stream_response_generator(repo), 
+            content_type='text/plain')
         resp['Content-Disposition'] = 'attachment; filename="all.json"'
         return resp
+
+    @detail_route(methods=['post', 'delete', 'get'])
+    def markup(self, request, repo, docid):
+        if request.method == 'POST':
+	    doc = Document.objects.filter(repo=repo, docid=docid).first()
+        
+            data = {}
+            try:
+                data = json.loads(request.body)
+            except Exception:
+                return Response('Please put a valid JSON object into your POST request')           
+
+            username = request.user.username
+            doc.update_mongo_data({ '$set' : { 'markup_partners.' + username : data }})
+            doc.update_elastic_data({ 'script' : 
+                'ctx._source.markup_partners.' + username + '= newObj',
+                'params' : { 'newObj' : data } })
+            # note: the previous commands replace, the following merges
+            #doc.update_elastic_data({ 'doc': {'markup_partners' : { username : data }}})
+            return HttpResponse('ok')
+
+        elif request.method == 'GET':
+           return HttpResponse('not yet supported') 
+        elif request.method == 'DELETE':
+            # delete
+            username = request.user.username
+            doc = Document.objects.filter(repo=repo, docid=docid).first()
+            doc.update_elastic_data({ "script" : 
+                "ctx._source.markup_partners.remove(\"" + username + "\")" })
+            doc.update_mongo_data({ '$unset' : { 'markup_partners.' + username : "" }})
+            return HttpResponse('ok')
 
 
 class DocSourceViewSet(viewsets.GenericViewSet,
@@ -225,6 +259,31 @@ class DocSourceViewSet(viewsets.GenericViewSet,
         kwargs = {}
         serializer.save(repo=repo, **kwargs)
         #_create_if_owned(self, serializer, {'creator': self.request.user})
+
+
+class RegexpViewSet(viewsets.GenericViewSet,
+                 mixins.ListModelMixin,
+                 mixins.RetrieveModelMixin,
+                 mixins.UpdateModelMixin,
+                 mixins.DestroyModelMixin,
+                 mixins.CreateModelMixin):
+
+    queryset = Regexp.objects.all()
+    serializer_class = RegexpSerializer
+    permission_classes = (IsAuthenticated,)
+
+    def get_queryset(self):
+        repo_name = self.kwargs.get('repo', None)
+        repo = Repository.objects.filter(name=repo_name).first()
+        return Regexp.objects.all().filter(repo=repo)
+
+    def perform_create(self, serializer):
+        repo_name = self.kwargs.get('repo', None)
+        repo = Repository.objects.filter(name=repo_name).first()
+        kwargs = {'owner': self.request.user}
+        serializer.save(repo=repo, **kwargs)
+
+
 
 def _get_queryset_owned(model, view):
     queryset = model.objects.select_related('repo__owner')
@@ -271,4 +330,7 @@ def _get_repo_from_view(view):
     repo = Repository.objects.filter(name=repo_name,
                                      owner__username=user_name).first()
     return repo
+
+
+
 

@@ -7,3 +7,5 @@ try:
 except:
     pass
 
+MONGO_DB_NAME = 'model_data'
+ELASTIC_INDEX_NAME = 'elem'

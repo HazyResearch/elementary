@@ -72,7 +72,21 @@ class Document(MongoMixin, ElasticMixin, models.Model):
         mdata = self.mongo_data
         if not mdata:
             return None
-        return mdata.get('result')
+        return mdata.get('result', None)
+
+    @property
+    def markup_partners(self):
+        mdata = self.mongo_data
+        if not mdata:
+            return {}
+        return mdata.get('markup_partners', {})
+
+    @property
+    def regexp_partners(self):
+        mdata = self.mongo_data
+        if not mdata:
+            return {}
+        return mdata.get('regexp_partners', {})
 
     def __unicode__(self):
         return self.full_name
@@ -109,14 +123,28 @@ class DocSource(models.Model):
         #return '[%s][%s] %s' % (self.id, self.repo.full_name, self.crawlid)
         return '[%s][%s] %s' % (self.id, self.repo.name, self.crawlid)
 
+class Regexp(models.Model):
+    repo = models.ForeignKey('Repository', related_name='regexps')
+    name = models.TextField()
+    regexp = models.TextField() 
+    #creator = models.ForeignKey('auth.User')
+    owner = models.ForeignKey('auth.User')
+    created = models.DateTimeField(auto_now_add=True)
 
-class Result(models.Model):
-    doc = models.ForeignKey('Document', related_name='results')
-    # denormalized field
-    repo = models.ForeignKey('Repository', related_name='results')
-    # record type, to be populated from the DD app output;
-    # semantics is determined by the DD app.
-    record_type = models.TextField(null=True)
-    # each record is an opaque blob; could be a string or a JSON
-    data = models.TextField()
+    class Meta:
+        unique_together = ('repo', 'name')
 
+    def __unicode__(self):
+        return '[%s][%s] %s' % (self.id, self.repo.name, self.name)
+
+
+#class Result(models.Model):
+#    doc = models.ForeignKey('Document', related_name='results')
+#    # denormalized field
+#    repo = models.ForeignKey('Repository', related_name='results')
+#    # record type, to be populated from the DD app output;
+#    # semantics is determined by the DD app.
+#    record_type = models.TextField(null=True)
+#    # each record is an opaque blob; could be a string or a JSON
+#    data = models.TextField()
+#

@@ -68,6 +68,8 @@ sudo ufw enable
 # create elasticsearch index
 source /opt/elementary/util/create_elastic_index.sh
 
+# create index on mongo
+mongo model_data --eval 'db.Document.ensureIndex({repo:1});'
 
 # to copy data from one server to another:
 # pg_dump --data-only elem | gzip > dump.sql.gz

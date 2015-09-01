@@ -1,6 +1,7 @@
 from django.conf import settings
 from django.db import models
 from pymongo import MongoClient
+from elasticsearch import Elasticsearch
 
 # placeholder for refreshing elasticsearch when documents
 # are updated. currently, documents are inserted into elasticsearch when
@@ -8,11 +9,31 @@ from pymongo import MongoClient
 
 class ElasticMixin(models.Model):
 
-    def update_elastic_data(self, data):
-        pass
+    def create_elastic_data(self, data):
+        es = self.get_elastic()
+        es.index(index=settings.ELASTIC_INDEX_NAME, doc_type='docs', id=self.docid,
+                body=data)
 
-    def delete_elastic_data(self, data):
-        pass
+    def update_elastic_data(self, data):
+        es = self.get_elastic()
+        es.update(index=settings.ELASTIC_INDEX_NAME, doc_type='docs', id=self.docid,
+                body=data)
+
+    def delete_elastic_data(self):
+        es = self.get_elastic()
+        es.delete(index=ELASTIC_INDEX_NAME, doc_type='docs', id=self.docid)
+
+    @classmethod
+    def _get_elastic(cls):
+        if hasattr(cls, '_es'):
+            es = cls._es
+        else:
+            es = Elasticsearch()
+            cls._es = es
+        return es
+
+    def get_elastic(self):
+        return self.__class__._get_elastic()
 
     class Meta:
         abstract = True
@@ -30,8 +51,11 @@ class MongoMixin(models.Model):
         self._mongo_data_cache = data
         return data
 
+    #def update_mongo_data(self, data):
+    #    self._exec_mongo_request('update_one', [{'$set': data}, True])  # True: upsert
+
     def update_mongo_data(self, data):
-        self._exec_mongo_request('update_one', [{'$set': data}, True])  # True: upsert
+        self._exec_mongo_request('update_one', [data, True])  # True: upsert
 
     def delete_mongo_data(self):
         self._exec_mongo_request('delete_one')
@@ -39,7 +63,7 @@ class MongoMixin(models.Model):
     @classmethod
     def get_mongo_collection(cls):
         client = MongoClient(**settings.MONGODB_CONNECTION_PARAMS)
-        db = client['model_data']
+        db = client[settings.MONGO_DB_NAME]
         model_name = cls.__name__
         collection = db[model_name]
         return collection

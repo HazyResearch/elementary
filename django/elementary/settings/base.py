@@ -41,6 +41,7 @@ PREREQ_APPS = [
     'rest_framework',
     'rest_framework.authtoken',
     'django_extensions',
+    'rest_framework_swagger'
 ]
 
 PROJECT_APPS = [
@@ -151,6 +152,10 @@ REST_FRAMEWORK = {
         'rest_framework.authentication.SessionAuthentication',
         'rest_framework.authentication.TokenAuthentication',
     ),
+    'DEFAULT_RENDERER_CLASSES': (
+        'rest_framework.renderers.JSONRenderer',
+        'rest_framework.renderers.BrowsableAPIRenderer',
+    ),
     'PAGE_SIZE': 100,
     'VIEW_NAME_FUNCTION': 'rest_framework.views.get_view_name',
     'VIEW_DESCRIPTION_FUNCTION': 'rest_framework.views.get_view_description'
@@ -186,3 +191,41 @@ ELEMENTARY_DATA_DIR = os.path.join(BASE_DIR, "data")
 ELEMENTARY_ALLOW_REPO_CREATION = False
 
 ELEMENTARY_PARSER_ENDPOINT = 'http://localhost:9000'
+
+
+SWAGGER_SETTINGS = {
+    'exclude_namespaces': [],
+    'api_version': '0.1',
+    'api_path': '/',
+    'enabled_methods': [
+        'get',
+        'post',
+        'put',
+        'patch',
+        'delete'
+    ],
+    'api_key': '',
+    'is_authenticated': False,
+    'is_superuser': False,
+    'permission_denied_handler': None,
+    'resource_access_handler': None,
+    'base_path':'helloreverb.com/docs',
+    'info': {
+        'contact': 'apiteam@wordnik.com',
+        'description': 'This is a sample server Petstore server. '
+                       'You can find out more about Swagger at '
+                       '<a href="http://swagger.wordnik.com">'
+                       'http://swagger.wordnik.com</a> '
+                       'or on irc.freenode.net, #swagger. '
+                       'For this sample, you can use the api key '
+                       '"special-key" to test '
+                       'the authorization filters',
+        'license': 'Apache 2.0',
+        'licenseUrl': 'http://www.apache.org/licenses/LICENSE-2.0.html',
+        'termsOfServiceUrl': 'http://helloreverb.com/terms/',
+        'title': 'Swagger Sample App',
+    },
+    'doc_expansion': 'none',
+}
+
+

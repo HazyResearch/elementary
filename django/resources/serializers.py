@@ -5,7 +5,7 @@ from django.db import IntegrityError
 from rest_framework import serializers
 from rest_framework.exceptions import ValidationError
 
-from .models import Document, DocSource, Repository
+from .models import Document, DocSource, Regexp, Repository
 from .tasks import process_docs_queue, ingest_sources_queue
 
 import uuid
@@ -99,11 +99,13 @@ class DocumentSerializer(serializers.ModelSerializer):
     processed = serializers.ReadOnlyField()
     url = serializers.SerializerMethodField()
     processing = serializers.SerializerMethodField()
-    result = serializers.SerializerMethodField()
+    #result = serializers.SerializerMethodField()
+    markup_partners = serializers.ReadOnlyField()
+    regexp_partners = serializers.ReadOnlyField()
 
     class Meta:
         model = Document
-        fields = ('url', 'repo', 'docid', 'doc_url', 'created', 'processed', 'content', 'processing', 'result')
+        fields = ('url', 'repo', 'docid', 'doc_url', 'created', 'processed', 'content', 'processing', 'result', 'markup_partners', 'regexp_partners')
 
     def get_url(self, obj):
         url = '/docs/%s/' % obj.full_name
@@ -123,8 +125,8 @@ class DocumentSerializer(serializers.ModelSerializer):
             return {'_status': 'NO_EXTRACTIONS'}
 	return {'_status': 'PROCESSED'} 
 
-    def get_result(self, obj):
-	return obj.result
+    #def get_result(self, obj):
+    #	return obj.result
 	#if obj.is_preprocessed:
 	    
         #if not obj.processed:
@@ -141,15 +143,19 @@ class DocumentSerializer(serializers.ModelSerializer):
     @catch_dml_failure('Value of docid conflicts with existing records')
     def create(self, validated_data):
         instance = super(DocumentSerializer, self).create(validated_data)
-        instance.update_mongo_data({
+        obj = {
+            'docid': instance.docid,
+            'url': self.get_url(instance),
+            'repo': instance.repo.name,
             'content': validated_data['content'],
-            'url': instance.url,
-            'repo': instance.repo,
             'created': instance.created,
-        })
-        instance.update_elastic_data({
-            'content': validated_data['content']
-        })
+            'processing':{ '_status': 'NOT_PROCESSED_YET' },
+            'result': {},
+            'markup_partners': {},
+            'regexp_partners': {}
+        }
+        instance.update_mongo_data({ '$set' : obj })
+        instance.create_elastic_data(obj)
         process_docs_queue.fill()
         return instance
 
@@ -158,19 +164,23 @@ class DocumentSerializer(serializers.ModelSerializer):
         content = validated_data.pop('content')
         super(DocumentSerializer, self).update(instance, validated_data)
         if instance.content != content:
-            instance.update_mongo_data({
+            instance.update_mongo_data({ '$set' : {
                 'content': content
-            })
+            }})
             instance.update_elastic_data({
                 'content': content
             })
         return instance
 
+    def delete(self, instance):
+        super(DocumentSerializer, self).delete(instance)
+        instance.delete_mongo_data()
+        instance.delete_elastic_data()
+
 def random_uuid_hex():
     return uuid.uuid4().hex
 
 class DocSourceSerializer(serializers.ModelSerializer):
-
     url = serializers.SerializerMethodField()
     crawlid = serializers.CharField(trim_whitespace=True, default=random_uuid_hex)
     #repo = serializers.StringRelatedField(source='repo.full_name')
@@ -201,3 +211,25 @@ class DocSourceSerializer(serializers.ModelSerializer):
         instance = super(DocSourceSerializer, self).create(validated_data)
         ingest_sources_queue.fill()
         return instance
+
+class RegexpSerializer(serializers.ModelSerializer):
+    name = serializers.RegexField(r'\w+')
+    repo = serializers.StringRelatedField(source='repo.name')
+    regexp = serializers.CharField(trim_whitespace=True)
+    owner = serializers.StringRelatedField(source='owner.username')
+    created = serializers.ReadOnlyField()
+
+    class Meta:
+        model = Regexp
+        fields = ('name', 'repo', 'regexp', 'owner', 'created')
+
+    #def get_url(self, obj):
+    #    #url = '/sources/%s/%s/' % (obj.repo.full_name, obj.pk)
+    #    url = '/regexps/%s/%s/' % (obj.repo.name, obj.pk)
+    #    return self.context['request'].build_absolute_uri(url)
+
+    #@catch_dml_failure('Value of name conflicts with existing records')
+    def create(self, validated_data):
+        instance = super(RegexpSerializer, self).create(validated_data)
+        return instance
+

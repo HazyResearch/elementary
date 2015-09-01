@@ -10,5 +10,5 @@ except:
 # capability, allow users to create repos.
 #ELEMENTARY_ALLOW_REPO_CREATION = True 
 
-MONGO_DB_NAME = 'model_data'
-ELASTIC_INDEX_NAME = 'elem'
+MONGO_DB_NAME = 'test'
+ELASTIC_INDEX_NAME = 'test'
