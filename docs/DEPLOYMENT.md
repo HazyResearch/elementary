@@ -10,7 +10,7 @@ This section describes the steps necessary to deploy the API to an ec-2 instance
 *  Create user eve
 
    ```
-   sudo adduser eve
+   sudo adduser eve ;
    sudo visudo
    ```
    Grant sudo rights to eve by adding the following line
@@ -45,10 +45,21 @@ This section describes the steps necessary to deploy the API to an ec-2 instance
    ```
    
    Now clone following repositories into `/opt`:
-   - elementary
-   - elementary-memex
-   - parser
-   - pgxl
+   ```
+   git clone https://github.com/hazyresearch/elementary.git
+   git clone https://github.com/hazyresearch/elementary-memex.git
+   ```
+
+   Also, clone the services repository containing /parser and /pgxl.
+
+   ```
+   cd /opt/elementary
+   ./setup.sh
+   cd /opt/elementary-memex
+   ./setup.sh
+   ```
+
+   Then install parser and pgxl.
 
    ```
    cd /opt/services/parser
@@ -62,12 +73,6 @@ This section describes the steps necessary to deploy the API to an ec-2 instance
    nodes should not exceed the amount of memory / 2GB. We use port 6432
    (not 5432) for pgxl to avoid clashing with Postgres.
 
-   ```
-   cd /opt/elementary
-   ./setup.sh
-   cd /opt/elementary-memex
-   ./setup.sh
-   ```
    Nginx will fail without a valid SSL certificate. You can create a self-signed
    certificate for testing.
    ```
