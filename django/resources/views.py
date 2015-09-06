@@ -12,6 +12,7 @@ from rest_framework.response import Response
 from rest_framework.decorators import detail_route, list_route
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.renderers import JSONRenderer, BrowsableAPIRenderer
+from rest_framework.views import APIView
 
 from .models import Document, DocSource, Regexp, Repository
 from .serializers import (DocumentSerializer, DocSourceSerializer,
@@ -20,12 +21,13 @@ from bson import json_util
 import json
 import urllib
 import urllib2
-
+import sys
 import logging
 
 from .bulk import *
 
 logger = logging.getLogger(__name__)
+
 
 @login_required
 def root(request):
@@ -131,7 +133,11 @@ class DocViewSet(viewsets.GenericViewSet,
                  mixins.RetrieveModelMixin,
                  mixins.UpdateModelMixin,
                  mixins.DestroyModelMixin,
-                 mixins.CreateModelMixin):
+                 mixins.CreateModelMixin,
+                 APIView):
+    """
+    Returns a list of documents with extractions.
+    """
     queryset = Document.objects.all()
     serializer_class = DocumentSerializer
     #permission_classes = [IsAdminOrOwner]
@@ -172,38 +178,78 @@ class DocViewSet(viewsets.GenericViewSet,
         r_from = int(request.GET.get('from', '0'))
         r_size = int(request.GET.get('size', '10'))
 
-        data = {
-          "query": {
-            "query_string" : { "query" : q }
-          },
-          "filter": {
-            "term" : { "repo" : repo }
-          },
-          "from" : r_from,
-          "size" : r_size
-        }
+        es = Elasticsearch()
+        res = es.search(
+            index='elem', 
+            doc_type='docs', 
+            body = {
+                'size': r_size,
+                'query': {
+                    'constant_score': {
+                       'query': {
+                           'query_string' : { 'query' : q }
+                       }
+                    }
+                },
+                'filter': {
+                    'term' : { 'repo' : repo }
+                },
+                'from': r_from
+            })
+        return Response(res)
 
-        url='http://127.0.0.1:9200/elem/docs/_search'
-        data_enc = urllib.urlencode(data)
-        req = urllib2.Request(url, json.dumps(data))
-        response = urllib2.urlopen(req)
-        the_page = response.read()
-        return HttpResponse(the_page, content_type="application/json")
 
     def stream_response_generator(self, repo):
-        collection = Document.get_mongo_collection()
-        for d in collection.find({'repo':repo}, { 'docid':1, 'content':1, 'doc_url':1, 'result':1,
-           'markup_partners':1, 'regexp_partners':1, 'created':'1', 'url':1, 'processing':1}):
-           del d['_id']
-           d['created'] = d['created'].strftime("%Y-%m-%d %H:%M:%S")
-           yield json.dumps(d) + '\n'
+        es = Elasticsearch()
+        res = es.search(
+            index='elem',
+            doc_type='docs',
+            search_type='scan',
+            scroll='10h',
+            body = { 
+                'size': 10000,
+                'query' : {
+                    'match_all' : {}
+                },
+                'filter': {
+                    'term' : { 'repo' : repo }
+                }
+            })
+        scroll_id = res['_scroll_id']
+
+        while True:
+            res = es.scroll(
+                scroll_id=scroll_id,
+                scroll='10h'
+            )
+            docs = res['hits']['hits']
+            if len(docs) == 0:
+                break
+            for d in docs:
+                yield json.dumps(d['_source']) + '\n'
 
     @list_route()
     def all(self, request, repo):
-        resp = StreamingHttpResponse( self.stream_response_generator(repo), 
+        resp = StreamingHttpResponse( self.stream_response_generator2(repo),
             content_type='text/plain')
         resp['Content-Disposition'] = 'attachment; filename="all.json"'
         return resp
+        
+
+    #def stream_response_generator(self, repo):
+    #    collection = Document.get_mongo_collection()
+    #    for d in collection.find({'repo':repo}, { 'docid':1, 'content':1, 'doc_url':1, 'result':1,
+    #       'markup_partners':1, 'regexp_partners':1, 'created':'1', 'url':1, 'processing':1}):
+    #       del d['_id']
+    #       d['created'] = d['created'].strftime("%Y-%m-%d %H:%M:%S")
+    #       yield json.dumps(d) + '\n'
+
+    #@list_route()
+    #def all(self, request, repo):
+    #    resp = StreamingHttpResponse( self.stream_response_generator(repo), 
+    #        content_type='text/plain')
+    #    resp['Content-Disposition'] = 'attachment; filename="all.json"'
+    #    return resp
 
     @detail_route(methods=['post', 'delete', 'get'])
     def markup(self, request, repo, docid):
