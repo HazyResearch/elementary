@@ -80,7 +80,7 @@ class RepositorySerializer(serializers.ModelSerializer):
         url = '/sources/%s/' % obj.name #full_name
         return self.context['request'].build_absolute_uri(url)
 
-    @catch_dml_failure('Repo name already exists')
+    #@catch_dml_failure('Repo name already exists')
     def create(self, validated_data):
         return super(RepositorySerializer, self).create(validated_data)
 
@@ -96,16 +96,18 @@ class DocumentSerializer(serializers.ModelSerializer):
     doc_url = serializers.URLField(max_length=1000, allow_blank=True, source='url')
     content = serializers.CharField(trim_whitespace=True)
     created = serializers.ReadOnlyField()
-    processed = serializers.ReadOnlyField()
+    #processed = serializers.ReadOnlyField()
     url = serializers.SerializerMethodField()
-    processing = serializers.SerializerMethodField()
+    #processing = serializers.SerializerMethodField()
     #result = serializers.SerializerMethodField()
+    processing = serializers.ReadOnlyField()
     markup_partners = serializers.ReadOnlyField()
     regexp_partners = serializers.ReadOnlyField()
 
     class Meta:
         model = Document
-        fields = ('url', 'repo', 'docid', 'doc_url', 'created', 'processed', 'content', 'processing', 'result', 'markup_partners', 'regexp_partners')
+        fields = ('url', 'repo', 'docid', 'doc_url', 'created', #'processed', 
+           'content', 'processing', 'result', 'markup_partners', 'regexp_partners')
 
     def get_url(self, obj):
         url = '/docs/%s/' % obj.full_name
