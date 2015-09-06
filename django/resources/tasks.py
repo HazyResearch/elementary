@@ -214,16 +214,22 @@ def ingest_docs_batch(source, docs, max_retries=2):
         ts_created = now()
         for docid in new_docids:
             id = docid_to_id_map[docid]
-            doc = docmap[docid]
-            if doc['is_preprocessed']:
+            doc = {}
+            orig = docmap[docid]
+            doc['docid'] = orig['docid']
+            doc['doc_url'] = orig['url']
+            doc['content'] = orig['content'] 
+            if orig['is_preprocessed']:
                 status = 'PREPROCESSED'
+                result = orig.get('result', {})
             else:
                 status = 'NOT_PROCESSED_YET'
+                result = {}
             doc['_id'] = id
-            doc['repo'] = source.repo
+            doc['repo'] = source.repo.name
             doc['created'] = ts_created
             doc['processing'] = { '_status': status }
-            doc['result'] = {}
+            doc['result'] = result
             doc['markup_partners'] = {}
             doc['regexp_partners'] = {}            
             mongo_records.append(doc)
