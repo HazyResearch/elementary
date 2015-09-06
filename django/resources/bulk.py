@@ -31,17 +31,20 @@ def elastic_add_or_replace(repo, docs):
     TIMEOUT=300
     for d in docs:
         id = d['_id']
+        docid = d['docid']
         content = d['content']
 
         op_dict = {
             "index": {
                 "_index": INDEX_NAME,
                 "_type": 'docs',
-                "_id": id
+                #"_id": id
+                '_id': docid
             }
         }
         data_dict = {
-            'id': id,
+            #'id': id,
+            'docid':docid,
             'doc_url': d.get('doc_url', ''),
             'created': d.get('created'),
             'content': content,
@@ -59,6 +62,10 @@ def elastic_add_or_replace(repo, docs):
 
     if len(bulk_data) > 0:
        res = es.bulk(index = INDEX_NAME, body = bulk_data, refresh = True, timeout=TIMEOUT)
+
+def elastic_get_docs_by_ids(repo, doc_ids):
+    pass
+
 
 
 
