@@ -1,5 +1,15 @@
 # Debugging
 
+*   Starting with a clean database
+    ```
+    dropdb elem
+    createdb elem
+    util/delete_indices.sh
+    rm django/resources/migrations/*
+    python django/manage.py makemigrations resources
+    python django/manage.py migrate --fake-initial
+    ```
+
 *   Restarting celery
     ```
     sudo supervisorctl
