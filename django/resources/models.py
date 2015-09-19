@@ -2,7 +2,7 @@ from django.db import models
 from django.contrib.postgres.fields import ArrayField, HStoreField
 from django.utils.http import urlquote
 
-from .model_mixins import MongoMixin, ElasticMixin
+from .model_mixins import ElasticMixin
 
 import uuid
 
@@ -25,10 +25,10 @@ class Repository(models.Model):
     #    return '%s/%s' % (self.owner.username, self.name)
 
     def __unicode__(self):
-        return self.name #full_name
+        return self.name 
 
 
-class Document(MongoMixin, ElasticMixin, models.Model):
+class Document(ElasticMixin, models.Model):
     docid = models.TextField()
     repo = models.ForeignKey('Repository', related_name='docs')
     source = models.ForeignKey('DocSource', null=True, related_name='docs')
@@ -43,50 +43,53 @@ class Document(MongoMixin, ElasticMixin, models.Model):
     processed = models.DateTimeField(null=True)
     processing_error = models.TextField(null=True)
 
-    # Inherited: mongo_data and update_mongo_data() from MongoMixin
-    # Processor may call update_mongo_data() to add text sections.
-
     class Meta:
         unique_together = ('repo', 'docid')
 
     @property
     def content(self):
-        mdata = self.mongo_data
-        if not mdata:
+        edata = self.elastic_data
+        if not edata:
             return None
-        return mdata.get('content')
+        return edata.get('content')
 
     def section_text(self, section):
-        mdata = self.mongo_data
-        if not mdata:
+        edata = self.elastic_data
+        if not edata:
             return None
-        return mdata.get(section, None)
+        return edata.get(section, None)
 
     @property
     def full_name(self):
-        #return '%s/%s' % (self.repo.full_name, self.docid)
         return '%s/%s' % (self.repo.name, self.docid)
 
     @property
-    def result(self):
-        mdata = self.mongo_data
-        if not mdata:
+    def processing(self):
+        edata = self.elastic_data
+        if not edata:
             return None
-        return mdata.get('result', None)
+        return edata.get('processing', None)
+
+    @property
+    def result(self):
+        edata = self.elastic_data
+        if not edata:
+            return None
+        return edata.get('result', None)
 
     @property
     def markup_partners(self):
-        mdata = self.mongo_data
-        if not mdata:
+        edata = self.elastic_data
+        if not edata:
             return {}
-        return mdata.get('markup_partners', {})
+        return edata.get('markup_partners', {})
 
     @property
     def regexp_partners(self):
-        mdata = self.mongo_data
-        if not mdata:
+        edata = self.elastic_data
+        if not edata:
             return {}
-        return mdata.get('regexp_partners', {})
+        return edata.get('regexp_partners', {})
 
     def __unicode__(self):
         return self.full_name

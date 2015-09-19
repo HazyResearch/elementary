@@ -93,11 +93,11 @@ class DocumentSerializer(serializers.ModelSerializer):
     #repo = serializers.StringRelatedField(source='repo.full_name')
     repo = serializers.StringRelatedField(source='repo.name')
     docid = serializers.CharField(max_length=100, trim_whitespace=True)
-    doc_url = serializers.URLField(max_length=1000, allow_blank=True, source='url')
+    #url = serializers.URLField(max_length=1000, allow_blank=True, source='url')
     content = serializers.CharField(trim_whitespace=True)
     created = serializers.ReadOnlyField()
     #processed = serializers.ReadOnlyField()
-    url = serializers.SerializerMethodField()
+    ref = serializers.SerializerMethodField()
     #processing = serializers.SerializerMethodField()
     #result = serializers.SerializerMethodField()
     processing = serializers.ReadOnlyField()
@@ -106,26 +106,26 @@ class DocumentSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Document
-        fields = ('url', 'repo', 'docid', 'doc_url', 'created', #'processed', 
+        fields = ('ref', 'repo', 'docid', 'url', 'created', #'processed', 
            'content', 'processing', 'result', 'markup_partners', 'regexp_partners')
 
-    def get_url(self, obj):
-        url = '/docs/%s/' % obj.full_name
-        return self.context['request'].build_absolute_uri(url)
+    def get_ref(self, obj):
+        ref = '/docs/%s/' % obj.full_name
+        return self.context['request'].build_absolute_uri(ref)
 
-    def get_processing(self, obj):
-	if obj.is_preprocessed:
-	    return {'_status': 'PREPROCESSED'}
-	if not obj.processed:
-            return {'_status': 'NOT_PROCESSED_YET'}
-        if obj.processed and not obj.result:
-            if obj.processing_error:
-                return {
-                    '_status': 'ERROR',
-                    '_error': obj.processing_error
-                }
-            return {'_status': 'NO_EXTRACTIONS'}
-	return {'_status': 'PROCESSED'} 
+    #def get_processing(self, obj):
+    #	if obj.is_preprocessed:
+    #	    return {'_status': 'PREPROCESSED'}
+    #	if not obj.processed:
+    #       return {'_status': 'NOT_PROCESSED_YET'}
+    #    if obj.processed and not obj.result:
+    #        if obj.processing_error:
+    #            return {
+    #                '_status': 'ERROR',
+    #                '_error': obj.processing_error
+    #            }
+    #        return {'_status': 'NO_EXTRACTIONS'}
+    #	return {'_status': 'PROCESSED'} 
 
     #def get_result(self, obj):
     #	return obj.result
@@ -147,7 +147,8 @@ class DocumentSerializer(serializers.ModelSerializer):
         instance = super(DocumentSerializer, self).create(validated_data)
         obj = {
             'docid': instance.docid,
-            'url': self.get_url(instance),
+            'ref': self.get_ref(instance),
+            'url': instance.url,
             'repo': instance.repo.name,
             'content': validated_data['content'],
             'created': instance.created,
@@ -156,7 +157,7 @@ class DocumentSerializer(serializers.ModelSerializer):
             'markup_partners': {},
             'regexp_partners': {}
         }
-        instance.update_mongo_data({ '$set' : obj })
+        #instance.update_mongo_data({ '$set' : obj })
         instance.create_elastic_data(obj)
         process_docs_queue.fill()
         return instance
@@ -164,19 +165,20 @@ class DocumentSerializer(serializers.ModelSerializer):
     @catch_dml_failure('Value of docid conflicts with existing records')
     def update(self, instance, validated_data):
         content = validated_data.pop('content')
+        url = validated_data.pop('url')
         super(DocumentSerializer, self).update(instance, validated_data)
         if instance.content != content:
-            instance.update_mongo_data({ '$set' : {
-                'content': content
-            }})
+            #instance.update_mongo_data({ '$set' : {
+            #    'content': content
+            #}})
             instance.update_elastic_data({
-                'content': content
+                'doc': { 'content': content, 'url': url }
             })
         return instance
 
     def delete(self, instance):
         super(DocumentSerializer, self).delete(instance)
-        instance.delete_mongo_data()
+        #instance.delete_mongo_data()
         instance.delete_elastic_data()
 
 def random_uuid_hex():

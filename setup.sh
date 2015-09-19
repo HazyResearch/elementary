@@ -41,6 +41,15 @@ sudo dpkg -i /tmp/elasticsearch-1.5.2.deb
 sudo update-rc.d elasticsearch defaults 95 10
 sudo service elasticsearch start
 
+# enable dynamic scripting
+echo '
+script.inline: on
+script.indexed: on
+script.disable_dynamic: false
+' | sudo tee -a /etc/elasticsearch/elasticsearch.yml
+sudo service elasticsearch start
+
+
 # python requirements
 sudo pip install virtualenv
 virtualenv --no-site-packages /opt/elementary/env/
@@ -69,7 +78,7 @@ sudo ufw enable
 source /opt/elementary/util/create_elastic_index.sh
 
 # create index on mongo
-mongo model_data --eval 'db.Document.ensureIndex({repo:1});'
+#mongo model_data --eval 'db.Document.ensureIndex({repo:1});'
 
 # to copy data from one server to another:
 # pg_dump --data-only elem | gzip > dump.sql.gz

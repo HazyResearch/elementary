@@ -16,14 +16,15 @@ from elasticsearch import Elasticsearch
 from ddctrl import ddctrl
 from .dataio import download_file, open_docs_file, validate_docs
 from .models import Document, DocSource, Repository
-from .bulk import *
+#from .bulk import *
+from . import elastic
 
 logger = logging.getLogger(__name__)
 
 PROCESSING_BATCH_SIZE = 100 * 1000
 INGESTION_BATCH_SIZE_BYTES = 100 * 1000 * 1000
 
-es = Elasticsearch()
+#es = Elasticsearch()
 
 @shared_task
 def process_docs():
@@ -56,8 +57,9 @@ def process_docs_in_batch(repo, doc_ids):
     logger.info('processing %d docs' % len(doc_ids))
     task_id = process_docs.request.id
 
-    collection = Document.get_mongo_collection()
-    docs = list(collection.find({'_id': {'$in': tuple(doc_ids)}}))
+    #collection = Document.get_mongo_collection()
+    #docs = list(collection.find({'_id': {'$in': tuple(doc_ids)}}))
+    docs = elastic.get_docs_by_ids(repo, doc_ids)
 
     # ddctrl updates docs in place
     error = None
@@ -75,25 +77,25 @@ def process_docs_in_batch(repo, doc_ids):
             d['processing']['_status'] = 'PROCESSED'
             d['processing']['processed'] = now()
 
-    # add to elasticsearch
-    elastic_add_or_replace(repo, docs)
+    # update elasticsearch
+    elastic.bulk_add_or_replace_docs(repo, docs)
 
     # update mongo
-    ops = []
-    for d in docs:
-        id = d['_id']
-        del d['content']
-        #if error is not None:
-        #    d['processing_error'] = error
-        ops.append(UpdateOne({'_id': id}, {
-            '$set': d
-        }))
-    collection.bulk_write(ops, ordered=False)
-    collection.database.client.close()
+    #ops = []
+    #for d in docs:
+    #    id = d['_id']
+    #    del d['content']
+    #    #if error is not None:
+    #    #    d['processing_error'] = error
+    #    ops.append(UpdateOne({'_id': id}, {
+    #        '$set': d
+    #    }))
+    #collection.bulk_write(ops, ordered=False)
+    #collection.database.client.close()
 
     # update stats on DocSource
     source_map = {}
-    for d in repo.docs.filter(id__in=doc_ids):
+    for d in repo.docs.filter(docid__in=doc_ids):
         if d.source is not None:
             key = d.source.crawlid
             source_map[key] = source_map.get(key, 0) + 1
@@ -103,7 +105,7 @@ def process_docs_in_batch(repo, doc_ids):
         ds.save()
 
     # update processed timestamp
-    repo.docs.filter(id__in=doc_ids).update(processed=now(),processing_error=error)
+    repo.docs.filter(docid__in=doc_ids).update(processed=now(),processing_error=error)
 
     logger.info('done')
 
@@ -112,11 +114,11 @@ def process_docs_for_repo(repo):
     logger.info('pipeline: %s' % repo.pipeline)
     logger.info('num docs: %d' % repo.docs.count())
     doc_ids = repo.docs.filter(is_preprocessed__exact=False,processed__isnull=True).order_by('created')\
-                       .values_list('id', flat=True)[:PROCESSING_BATCH_SIZE]
+                       .values_list('docid', flat=True)[:PROCESSING_BATCH_SIZE]
     while doc_ids:
         process_docs_in_batch(repo, doc_ids)
         doc_ids = repo.docs.filter(is_preprocessed__exact=False,processed__isnull=True).order_by('created')\
-                           .values_list('id', flat=True)[:PROCESSING_BATCH_SIZE]
+                           .values_list('docid', flat=True)[:PROCESSING_BATCH_SIZE]
     logger.info('DONE!')
 
 
@@ -217,7 +219,7 @@ def ingest_docs_batch(source, docs, max_retries=2):
             doc = {}
             orig = docmap[docid]
             doc['docid'] = orig['docid']
-            doc['doc_url'] = orig['url']
+            doc['url'] = orig['url']
             doc['content'] = orig['content'] 
             if orig['is_preprocessed']:
                 status = 'PREPROCESSED'
@@ -233,14 +235,14 @@ def ingest_docs_batch(source, docs, max_retries=2):
             doc['markup_partners'] = {}
             doc['regexp_partners'] = {}            
             mongo_records.append(doc)
-        logger.info('inserting %d docs into mongo' % len(mongo_records))
-        collection = Document.get_mongo_collection()
-        collection.delete_many({ '_id' : { '$in' : [ doc['_id'] for doc in mongo_records]}})
-        collection.insert_many(mongo_records, ordered=False)
-        collection.database.client.close()
+        #logger.info('inserting %d docs into mongo' % len(mongo_records))
+        #collection = Document.get_mongo_collection()
+        #collection.delete_many({ '_id' : { '$in' : [ doc['_id'] for doc in mongo_records]}})
+        #collection.insert_many(mongo_records, ordered=False)
+        #collection.database.client.close()
 
         logger.info('inserting %d docs into elastic' % len(mongo_records))
-        elastic_add_or_replace(source.repo, mongo_records)
+        elastic.bulk_add_or_replace_docs(source.repo, mongo_records)
 
 
     return len(records)

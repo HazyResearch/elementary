@@ -47,7 +47,7 @@ def run_pipeline(task_id, repo, docs):
         for d in docs:
             
             data = {
-                'id': d['_id'],
+                'id': d['docid'], #d['_id'],
                 'url': d.get('url', ''),
                 'content': d.get('content', '')
             }
@@ -69,8 +69,8 @@ def run_pipeline(task_id, repo, docs):
     # push parsing results into the input json objects
     blob_map = {str(x): y for x, y in docs_parsed}
     for d in docs:
-        if str(d['_id']) in blob_map:
-            d['parse'] = blob_map[str(d['_id'])]
+        if str(d['docid']) in blob_map:
+            d['parse'] = blob_map[str(d['docid'])]
 
     # write parsing results to TSV file
     with codecs.open(os.path.join(task_dir, 'parsed.tsv'), 'w', 'utf-8') as f:
@@ -82,18 +82,17 @@ def run_pipeline(task_id, repo, docs):
     p3.communicate()  # wait
 
     # results are now in task_dir/result.json
-    # the _ids here are mongo's internal IDs (unique and allow efficient updates)
     results = {}
     with open(task_dir + '/result.json', 'r') as f:
         for line in f:
             j = json.loads(line)
-            _id = j['doc_id']
-            del j['doc_id']
-            results[str(_id)] = j
+            _id = j['docid']
+            del j['docid']
+            results[str(_id)] = j['result']
 
     for d in docs:
-        _id = str(d['_id'])
-        if _id in results:
-            d['result'] = results[_id]
+        docid = str(d['docid'])
+        if docid in results:
+            d['result'] = results[docid]
 
     shutil.rmtree(task_dir)

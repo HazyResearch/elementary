@@ -24,15 +24,13 @@ import urllib2
 import sys
 import logging
 
-from .bulk import *
+from . import elastic
 
 logger = logging.getLogger(__name__)
-
 
 @login_required
 def root(request):
     return render(request, 'index.html')
-
 
 class AuthTokenView(ObtainAuthToken):
     def get(self, request):
@@ -119,13 +117,18 @@ class RepoViewSet(viewsets.ModelViewSet):
         return obj
 
     def perform_create(self, serializer):
-        serializer.save() #(owner=self.request.user)
+        repo_name = self.request.POST['name']
+        elastic.create_repo(repo_name)
+        serializer.save() #(owner=self.request.user)        
 
     def perform_destroy(self, instance):
         # delete from elastic
-        elastic_delete_repo(instance.name) 
+        #try:
+        elastic.delete_repo(instance.name) 
+        #except e:
+        #  logging.error(e)
         # delete from mongo
-        mongo_delete_repo(instance.name)
+        #mongo_delete_repo(instance.name)
         super(RepoViewSet, self).perform_destroy(instance)
 
 class DocViewSet(viewsets.GenericViewSet,
@@ -168,60 +171,26 @@ class DocViewSet(viewsets.GenericViewSet,
         # delete from elasticsearch
         instance.delete_elastic_data()
         # delete from mongo
-        instance.delete_mongo_data()
+        #instance.delete_mongo_data()
         # delete from postgres
         super(DocViewSet, self).perform_destroy(instance)
 
     @list_route()
     def search(self, request, repo):
-        q = request.GET.get('q', '')
+        query = request.GET.get('q', '')
         r_from = int(request.GET.get('from', '0'))
         r_size = int(request.GET.get('size', '10'))
 
-        es = Elasticsearch()
-        res = es.search(
-            index='elem', 
-            doc_type='docs', 
-            body = {
-                'size': r_size,
-                'query': {
-                    'constant_score': {
-                       'query': {
-                           'query_string' : { 'query' : q }
-                       }
-                    }
-                },
-                'filter': {
-                    'term' : { 'repo' : repo }
-                },
-                'from': r_from
-            })
+        res = elastic.search(repo, query, r_from, r_size)
         return Response(res)
 
 
     def stream_response_generator(self, repo):
-        es = Elasticsearch()
-        res = es.search(
-            index='elem',
-            doc_type='docs',
-            search_type='scan',
-            scroll='10h',
-            body = { 
-                'size': 10000,
-                'query' : {
-                    'match_all' : {}
-                },
-                'filter': {
-                    'term' : { 'repo' : repo }
-                }
-            })
+        res = elastic.search_scan(repo)
         scroll_id = res['_scroll_id']
 
         while True:
-            res = es.scroll(
-                scroll_id=scroll_id,
-                scroll='10h'
-            )
+            res = elastic.scroll(scroll_id)
             docs = res['hits']['hits']
             if len(docs) == 0:
                 break
@@ -230,26 +199,10 @@ class DocViewSet(viewsets.GenericViewSet,
 
     @list_route()
     def all(self, request, repo):
-        resp = StreamingHttpResponse( self.stream_response_generator2(repo),
+        resp = StreamingHttpResponse( self.stream_response_generator(repo),
             content_type='text/plain')
         resp['Content-Disposition'] = 'attachment; filename="all.json"'
         return resp
-        
-
-    #def stream_response_generator(self, repo):
-    #    collection = Document.get_mongo_collection()
-    #    for d in collection.find({'repo':repo}, { 'docid':1, 'content':1, 'doc_url':1, 'result':1,
-    #       'markup_partners':1, 'regexp_partners':1, 'created':'1', 'url':1, 'processing':1}):
-    #       del d['_id']
-    #       d['created'] = d['created'].strftime("%Y-%m-%d %H:%M:%S")
-    #       yield json.dumps(d) + '\n'
-
-    #@list_route()
-    #def all(self, request, repo):
-    #    resp = StreamingHttpResponse( self.stream_response_generator(repo), 
-    #        content_type='text/plain')
-    #    resp['Content-Disposition'] = 'attachment; filename="all.json"'
-    #    return resp
 
     @detail_route(methods=['post', 'delete', 'get'])
     def markup(self, request, repo, docid):
@@ -263,7 +216,7 @@ class DocViewSet(viewsets.GenericViewSet,
                 return Response('Please put a valid JSON object into your POST request')           
 
             username = request.user.username
-            doc.update_mongo_data({ '$set' : { 'markup_partners.' + username : data }})
+            #doc.update_mongo_data({ '$set' : { 'markup_partners.' + username : data }})
             doc.update_elastic_data({ 'script' : 
                 'ctx._source.markup_partners.' + username + '= newObj',
                 'params' : { 'newObj' : data } })
@@ -279,7 +232,7 @@ class DocViewSet(viewsets.GenericViewSet,
             doc = Document.objects.filter(repo=repo, docid=docid).first()
             doc.update_elastic_data({ "script" : 
                 "ctx._source.markup_partners.remove(\"" + username + "\")" })
-            doc.update_mongo_data({ '$unset' : { 'markup_partners.' + username : "" }})
+            #doc.update_mongo_data({ '$unset' : { 'markup_partners.' + username : "" }})
             return HttpResponse('ok')
 
 

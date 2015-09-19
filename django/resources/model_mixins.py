@@ -1,7 +1,7 @@
 from django.conf import settings
 from django.db import models
-from pymongo import MongoClient
-from elasticsearch import Elasticsearch
+
+from . import elastic
 
 # placeholder for refreshing elasticsearch when documents
 # are updated. currently, documents are inserted into elasticsearch when
@@ -9,82 +9,95 @@ from elasticsearch import Elasticsearch
 
 class ElasticMixin(models.Model):
 
+    @property
+    def elastic_data(self):
+        if not self.docid:
+            return None
+        if hasattr(self, '_elastic_data_cache'):
+            return self._elastic_data_cache
+        data = elastic.get_doc(self.repo, self.docid)
+        self._elastic_data_cache = data
+        return data
+
     def create_elastic_data(self, data):
-        es = self.get_elastic()
-        es.index(index=settings.ELASTIC_INDEX_NAME, doc_type='docs', id=self.docid,
-                body=data)
+        #es = self.get_elastic()
+        #es.index(index=settings.ELASTIC_INDEX_NAME, doc_type=self.repo, id=self.docid,
+        #        body=data)
+        elastic.create_doc(self.repo, self.docid, data)
 
     def update_elastic_data(self, data):
-        es = self.get_elastic()
-        es.update(index=settings.ELASTIC_INDEX_NAME, doc_type='docs', id=self.docid,
-                body=data)
+        #es = self.get_elastic()
+        #es.update(index=settings.ELASTIC_INDEX_NAME, doc_type=self.repo, id=self.docid,
+        #        body=data)
+        elastic.update_doc(self.repo, self.docid, data)
 
     def delete_elastic_data(self):
-        es = self.get_elastic()
-        es.delete(index=ELASTIC_INDEX_NAME, doc_type='docs', id=self.docid)
+        #es = self.get_elastic()
+        #es.delete(index=ELASTIC_INDEX_NAME, doc_type=self.repo, id=self.docid)
+        elastic.delete_doc(self.repo, self.docid)
 
-    @classmethod
-    def _get_elastic(cls):
-        if hasattr(cls, '_es'):
-            es = cls._es
-        else:
-            es = Elasticsearch()
-            cls._es = es
-        return es
+    #@classmethod
+    #def _get_elastic(cls):
+    #    if hasattr(cls, '_es'):
+    #        es = cls._es
+    #    else:
+    #        es = Elasticsearch()
+    #        cls._es = es
+    #    return es
 
-    def get_elastic(self):
-        return self.__class__._get_elastic()
+    #def get_elastic(self):
+    #    return self.__class__._get_elastic()
 
     class Meta:
         abstract = True
 
 
-class MongoMixin(models.Model):
+#class MongoMixin(models.Model):
 
-    @property
-    def mongo_data(self):
-        if not self.id:
-            return None
-        if hasattr(self, '_mongo_data_cache'):
-            return self._mongo_data_cache
-        data = self._exec_mongo_request('find_one')
-        self._mongo_data_cache = data
-        return data
+#    @property
+#    def mongo_data(self):
+#        if not self.id:
+#            return None
+#        if hasattr(self, '_mongo_data_cache'):
+#            return self._mongo_data_cache
+#        data = self._exec_mongo_request('find_one')
+#        self._mongo_data_cache = data
+#        return data
 
     #def update_mongo_data(self, data):
     #    self._exec_mongo_request('update_one', [{'$set': data}, True])  # True: upsert
 
-    def update_mongo_data(self, data):
-        self._exec_mongo_request('update_one', [data, True])  # True: upsert
+#    def update_mongo_data(self, data):
+#        self._exec_mongo_request('update_one', [data, True])  # True: upsert
 
-    def delete_mongo_data(self):
-        self._exec_mongo_request('delete_one')
+#    def delete_mongo_data(self):
+#        self._exec_mongo_request('delete_one')
 
-    @classmethod
-    def get_mongo_collection(cls):
-        client = MongoClient(**settings.MONGODB_CONNECTION_PARAMS)
-        db = client[settings.MONGO_DB_NAME]
-        model_name = cls.__name__
-        collection = db[model_name]
-        return collection
+#    @classmethod
+#    def get_mongo_collection(cls):
+#        client = MongoClient(**settings.MONGODB_CONNECTION_PARAMS)
+#        db = client[settings.MONGO_DB_NAME]
+#        model_name = cls.__name__
+#        collection = db[model_name]
+#        return collection
 
-    def _exec_mongo_request(self, command, args=None):
-        if hasattr(self.__class__, '_mongo_collection'):
-            collection = self.__class__._mongo_collection
-        else:
-            collection = self.__class__.get_mongo_collection()
-            self.__class__._mongo_collection = collection
-        if command not in ['find_one', 'update_one', 'delete_one']:
-            raise ValueError('Bad command: %s' % command)
-        if not self.pk:
-            raise ValueError('No PK value found. Has the object been saved?')
-        spec = {'_id': self.pk}
-        func = getattr(collection, command)
+#    def _exec_mongo_request(self, command, args=None):
+#        if hasattr(self.__class__, '_mongo_collection'):
+#            collection = self.__class__._mongo_collection
+#        else:
+#            collection = self.__class__.get_mongo_collection()
+#            self.__class__._mongo_collection = collection
+#        if command not in ['find_one', 'update_one', 'delete_one']:
+#            raise ValueError('Bad command: %s' % command)
+#        if not self.pk:
+#            raise ValueError('No PK value found. Has the object been saved?')
+#        spec = {'_id': self.pk}
+#        func = getattr(collection, command)
         # if there is a connection failure, this operation would fail,
-        # but pymongo would reconnect in the background -- hopefully in time for next operation.
-        if not args:
-            args = []
-        return func(spec, *args)
-
-    class Meta:
-        abstract = True
+#        # but pymongo would reconnect in the background -- hopefully in time for next operation.
+#        if not args:
+#            args = []
+#        return func(spec, *args)
+#
+#    class Meta:
+#        abstract = True

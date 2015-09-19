@@ -2,6 +2,7 @@
 from __future__ import unicode_literals
 
 from django.db import models, migrations
+from django.conf import settings
 import django.contrib.postgres.fields.hstore
 import resources.models
 
@@ -9,6 +10,7 @@ import resources.models
 class Migration(migrations.Migration):
 
     dependencies = [
+        migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
     operations = [
@@ -41,6 +43,16 @@ class Migration(migrations.Migration):
             ],
         ),
         migrations.CreateModel(
+            name='Regexp',
+            fields=[
+                ('id', models.AutoField(verbose_name='ID', serialize=False, auto_created=True, primary_key=True)),
+                ('name', models.TextField()),
+                ('regexp', models.TextField()),
+                ('created', models.DateTimeField(auto_now_add=True)),
+                ('owner', models.ForeignKey(to=settings.AUTH_USER_MODEL)),
+            ],
+        ),
+        migrations.CreateModel(
             name='Repository',
             fields=[
                 ('name', models.TextField(serialize=False, primary_key=True)),
@@ -48,15 +60,10 @@ class Migration(migrations.Migration):
                 ('pipeline', models.TextField(null=True, choices=[(b'memex/atf', b'Memex ATF'), (b'memex/escort', b'Memex Escort'), (b'genomics', b'Genomics')])),
             ],
         ),
-        migrations.CreateModel(
-            name='Result',
-            fields=[
-                ('id', models.AutoField(verbose_name='ID', serialize=False, auto_created=True, primary_key=True)),
-                ('record_type', models.TextField(null=True)),
-                ('data', models.TextField()),
-                ('doc', models.ForeignKey(related_name='results', to='resources.Document')),
-                ('repo', models.ForeignKey(related_name='results', to='resources.Repository')),
-            ],
+        migrations.AddField(
+            model_name='regexp',
+            name='repo',
+            field=models.ForeignKey(related_name='regexps', to='resources.Repository'),
         ),
         migrations.AddField(
             model_name='document',
@@ -72,6 +79,10 @@ class Migration(migrations.Migration):
             model_name='docsource',
             name='repo',
             field=models.ForeignKey(related_name='sources', to='resources.Repository'),
+        ),
+        migrations.AlterUniqueTogether(
+            name='regexp',
+            unique_together=set([('repo', 'name')]),
         ),
         migrations.AlterUniqueTogether(
             name='document',
